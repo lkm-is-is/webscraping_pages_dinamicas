@@ -1,0 +1,81 @@
+import csv
+from selenium import webdriver
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.keys import Keys
+from bs4 import BeautifulSoup
+import time
+from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+#WebDriver
+driver = webdriver.Chrome()
+url ="https://www.zapimoveis.com.br/venda/casa-comercial/rj+rio-de-janeiro+zona-central+centro/?__ab=exp-aa-test:control,pix-payment:control&transacao=venda&onde=,Rio%20de%20Janeiro,Rio%20de%20Janeiro,Zona%20Central,Centro,,,neighborhood,BR%3ERio%20de%20Janeiro%3ENULL%3ERio%20de%20Janeiro%3EZona%20Central%3ECentro,-22.907083,-43.181915,&tipos=imovel-comercial_comercial,predio_comercial&pagina=1&areaMinima=600&areaMaxima=800"
+driver.get(url)
+
+#max de anúncios
+max_anuncios = 150000
+anuncios_coletados = 0
+
+#matriz para dados coletados
+anuncios_data = []
+
+#newcsv
+csv_filename = "rj_edificacoes.csv"
+csv_file = open(csv_filename, "w", newline="", encoding="utf-8")
+csv_writer = csv.writer(csv_file)
+csv_writer.writerow(["Preço", "M2", "bairro"])
+
+#wait page elements
+def esperar_elementos():
+    WebDriverWait(driver, tempo_limite).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, 'div.result-card'))
+    )
+    WebDriverWait(driver, tempo_limite).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, 'button[aria-label="Próxima página"]'))
+    )
+
+#limitemax (30)
+tempo_limite = 30
+
+while anuncios_coletados < max_anuncios:
+    #emull human scroll (56 scrolls com 1s de intervalo)
+    for _ in range(56):
+        ActionChains(driver).send_keys(Keys.PAGE_DOWN).perform()
+        time.sleep(1)
+
+    #search and wait for page elements
+    esperar_elementos()
+
+    page_source = driver.page_source
+    soup = BeautifulSoup(page_source, 'html.parser')
+    anuncios = soup.find_all("div", class_="result-card")
+
+    for anuncio in anuncios:
+        preco = anuncio.find("div", class_="listing-price").text
+        metros_quadrados = anuncio.find("p", class_="l-text l-u-color-neutral-28 l-text--variant-body-small l-text--weight-regular card__amenity").text
+        bairro = anuncio.find("section", class_="card__location").text
+
+        #write on csv
+        csv_writer.writerow([preco, metros_quadrados, bairro])
+        anuncios_data.append([preco, metros_quadrados, bairro])
+        anuncios_coletados += 1
+
+    #limite de anúncios
+    if anuncios_coletados >= max_anuncios:
+        break
+
+    #search and click 'next page'
+    try:
+        next_button = driver.find_element(By.CSS_SELECTOR, 'button[aria-label="Próxima página"]')
+        next_button.click()
+    except NoSuchElementException:
+        break  #not found: break
+
+    time.sleep(4)  #tempo de espera newPage, 4s
+
+#quit driver
+driver.quit()
+
+print(f"Dados foram salvos com sucesso: {csv_filename}")
