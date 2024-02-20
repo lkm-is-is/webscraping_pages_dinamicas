@@ -1,1 +1,71 @@
-C
+import pandas as pd
+import re
+
+# Função para extrair o preço
+def extrair_preco(preco):
+    match = re.search(r'\d+', str(preco))  # Procurar por um ou mais dígitos numéricos
+    if match:
+        return match.group()  # Retornar o valor encontrado
+    return None  # Retornar None se nenhum padrão for encontrado
+
+# Função para identificar outliers
+def identificar_outliers(data):
+    q1 = data.quantile(0.25)
+    q3 = data.quantile(0.75)
+    iqr = q3 - q1
+    lower_bound = q1 - 1.5 * iqr
+    upper_bound = q3 + 1.5 * iqr
+    outliers = (data < lower_bound) | (data > upper_bound)
+    return outliers
+
+# Ler o arquivo Excel
+caminho_arquivo = r"C:\Users\marcos.ribeiro\CASA_SOROCABA_SP.xlsx"
+df = pd.read_excel(caminho_arquivo)
+
+# Extrair o preço e converter para numérico
+df['Preço'] = df['Preço'].apply(extrair_preco)
+df['Preço'] = pd.to_numeric(df['Preço'], errors='coerce')
+
+# Remover linhas com valores nulos após a extração
+df = df.dropna(subset=['Preço'])
+
+# Converter a coluna 'M2' para numérico
+df['M2'] = df['M2'].str.extract('(\d+)').astype(float)
+
+# Remover linhas com valores nulos após a conversão
+df = df.dropna(subset=['M2'])
+
+# Calcular o preço por metro quadrado e criar uma nova coluna
+df['p/m²'] = df['Preço'] / df['M2']
+
+# Identificar e remover outliers na coluna 'p/m²'
+outliers_p_m2 = identificar_outliers(df['p/m²'])
+df_sem_outliers = df[~outliers_p_m2]
+
+# Verificar se há dados restantes após a remoção dos outliers
+if len(df_sem_outliers) > 0:
+    # Calcular a média geral dos valores sem outliers na coluna 'p/m²'
+    media_sem_outliers = df_sem_outliers['p/m²'].mean()
+
+    # Calcular o coeficiente de variação dos valores sem outliers na coluna 'p/m²'
+    desvio_padrao = df_sem_outliers['p/m²'].std()
+    coeficiente_variacao = (desvio_padrao / media_sem_outliers) * 100
+
+    # Obter a quantidade de elementos no arquivo final
+    quantidade_elementos = len(df_sem_outliers)
+
+    # Obter o valor mínimo de p/m² encontrado
+    valor_minimo_p_m2 = df_sem_outliers['p/m²'].min()
+
+    # Imprimir os resultados
+    print("Média geral dos valores de p/m² sem outliers:", media_sem_outliers)
+    print("Coeficiente de Variação dos valores de p/m² sem outliers:", coeficiente_variacao)
+    print("Quantidade de elementos no arquivo final:", quantidade_elementos)
+    print("Valor mínimo de p/m² encontrado:", valor_minimo_p_m2)
+
+    # Exportar o arquivo final com todos os tratamentos
+    arquivo_final = r"C:\Users\marcos.ribeiro\arquivo_final.xlsx"
+    df_sem_outliers.to_excel(arquivo_final, index=False)
+    print("Arquivo final exportado com sucesso em:", arquivo_final)
+else:
+    print("Não há dados restantes após a remoção dos outliers.")
